@@ -17,6 +17,10 @@ inputs:
     description: smol-wf release tag to install, or latest for the latest stable release
     required: false
     default: v0.3.4
+  use-cache:
+    description: Cache the installed smol-wf binary between workflow runs
+    required: false
+    default: 'false'
   args:
     description: Workflow arguments as a YAML mapping
     required: false
@@ -44,24 +48,80 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install smol-wf
+    - name: Resolve smol-wf version
+      id: resolve-version
       shell: bash
       env:
         SMOL_WF_VERSION: ${{ inputs.smol-wf-version }}
       run: |
         set -euo pipefail
         if [[ "$SMOL_WF_VERSION" == "latest" ]]; then
-          SMOL_WF_VERSION="$(curl -fsSL https://api.github.com/repos/b4fun/smol-workflows/releases/latest | jq -er '.tag_name | select(type == "string" and length > 0)')"
+          SMOL_WF_VERSION="$(curl -fsSL https://api.github.com/repos/b4fun/smol-workflows/releases/latest \
+            | sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' \
+            | head -n 1)"
+          if [[ -z "$SMOL_WF_VERSION" ]]; then
+            echo "Could not resolve the latest smol-wf release" >&2
+            exit 1
+          fi
           echo "Resolved smol-wf latest release to $SMOL_WF_VERSION"
         fi
         if [[ ! "$SMOL_WF_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
           echo "smol-wf-version must be 'latest' or a release tag such as v0.3.4" >&2
           exit 2
         fi
+        echo "version=$SMOL_WF_VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Cache smol-wf
+      uses: actions/cache@v4
+      if: ${{ inputs.use-cache == 'true' }}
+      with:
+        path: ${{ runner.temp }}/smol-wf/bin
+        key: smol-wf-${{ runner.os }}-${{ runner.arch }}-${{ steps.resolve-version.outputs.version }}-yq4.54.1-jq1.8.2
+
+    - name: Install yq and jq
+      shell: bash
+      env:
+        YQ_VERSION: v4.54.1
+        JQ_VERSION: 1.8.2
+      run: |
+        set -euo pipefail
         install_dir="$RUNNER_TEMP/smol-wf/bin"
         mkdir -p "$install_dir"
-        curl -fsSL "https://raw.githubusercontent.com/b4fun/smol-workflows/${SMOL_WF_VERSION}/install.sh" \
-          | bash -s -- --version "$SMOL_WF_VERSION" --dir "$install_dir"
+
+        case "$RUNNER_OS:$RUNNER_ARCH" in
+          Linux:X64) yq_platform=linux_amd64; jq_platform=linux-amd64 ;;
+          Linux:ARM64) yq_platform=linux_arm64; jq_platform=linux-arm64 ;;
+          macOS:X64) yq_platform=darwin_amd64; jq_platform=macos-amd64 ;;
+          macOS:ARM64) yq_platform=darwin_arm64; jq_platform=macos-arm64 ;;
+          *) echo "Unsupported runner platform: $RUNNER_OS/$RUNNER_ARCH" >&2; exit 2 ;;
+        esac
+
+        if [[ ! -x "$install_dir/yq" ]]; then
+          curl -fsSL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${yq_platform}" \
+            -o "$install_dir/yq"
+          chmod +x "$install_dir/yq"
+        fi
+        if [[ ! -x "$install_dir/jq" ]]; then
+          curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-${jq_platform}" \
+            -o "$install_dir/jq"
+          chmod +x "$install_dir/jq"
+        fi
+        echo "$install_dir" >> "$GITHUB_PATH"
+
+    - name: Install smol-wf
+      shell: bash
+      env:
+        SMOL_WF_VERSION: ${{ steps.resolve-version.outputs.version }}
+      run: |
+        set -euo pipefail
+        install_dir="$RUNNER_TEMP/smol-wf/bin"
+        mkdir -p "$install_dir"
+        if [[ ! -x "$install_dir/smol-wf" ]]; then
+          curl -fsSL "https://raw.githubusercontent.com/b4fun/smol-workflows/${SMOL_WF_VERSION}/install.sh" \
+            | bash -s -- --version "$SMOL_WF_VERSION" --dir "$install_dir"
+        else
+          echo "Using cached smol-wf $SMOL_WF_VERSION"
+        fi
         echo "$install_dir" >> "$GITHUB_PATH"
 
     - name: Prepare workflow arguments

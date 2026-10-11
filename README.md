@@ -27,9 +27,11 @@ steps:
 
 `actions/checkout` is required because the workflow script is read from the caller's workspace. The selected provider executable and its authentication must also be available on the runner. This action installs `smol-wf`; it does not install or authenticate provider CLIs. Provider-specific setup varies, so add those steps before invoking this action and pass credentials through `env` using GitHub Secrets.
 
-The runner needs Bash, `curl`, Mike Farah's `yq`, and `jq`.
+The runner needs Bash and `curl`. The action installs pinned versions of Mike Farah's `yq` and `jq` into its temporary tool directory.
 
 Set `smol-wf-version: latest` to install the latest stable smol-wf release. This resolves the version each time the action runs; use an explicit release tag when you want runs to stay on the same CLI version.
+
+Set `use-cache: true` to cache `smol-wf`, `yq`, and `jq` by runner OS, architecture, and their pinned versions. Caching is disabled by default. A cache miss downloads and installs the binaries; changing any version selects a separate cache.
 
 The default provider is `debug`, which does not call an LLM. Supported provider names are `debug`, `codex`, `claude-code`, `opencode`, and `pi`.
 
@@ -40,6 +42,7 @@ The default provider is `debug`, which does not call an LLM. Supported provider 
 | `workflow` | Yes | — | Workflow script path relative to `working-directory`. |
 | `provider` | No | `debug` | smol-wf agent provider. |
 | `smol-wf-version` | No | `v0.3.4` | Versioned smol-wf release tag to install, or `latest` to resolve the latest stable release at run time. |
+| `use-cache` | No | `false` | Cache the installed binary between workflow runs. |
 | `args` | No | `{}` | Workflow arguments as a YAML mapping. Nested mappings and lists are supported. |
 | `working-directory` | No | `.` | Workflow working directory relative to `GITHUB_WORKSPACE`. |
 | `db-path` | No | Runner temp directory | SQLite database path. Relative paths resolve from `GITHUB_WORKSPACE`. |
