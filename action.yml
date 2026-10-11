@@ -72,10 +72,10 @@ runs:
         set -euo pipefail
         args_file="$RUNNER_TEMP/smol-wf/args.json"
         mkdir -p "$(dirname "$args_file")"
-        printf '%s' "$SMOL_WF_ARGS" | ruby -rjson -ryaml -e '
-          value = YAML.safe_load(STDIN.read, permitted_classes: [], permitted_symbols: [], aliases: false)
-          abort("args must be a YAML mapping") unless value.is_a?(Hash)
-          STDOUT.write(JSON.generate(value))
+        printf '%s' "$SMOL_WF_ARGS" | yq -o=json '.' | jq -ces '
+          if length == 1 and (.[0] | type == "object") then .[0]
+          else error("args must be a YAML mapping")
+          end
         ' > "$args_file"
 
     - name: Run workflow

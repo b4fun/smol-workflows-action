@@ -27,7 +27,7 @@ steps:
 
 `actions/checkout` is required because the workflow script is read from the caller's workspace. The selected provider executable and its authentication must also be available on the runner. This action installs `smol-wf`; it does not install or authenticate provider CLIs. Provider-specific setup varies, so add those steps before invoking this action and pass credentials through `env` using GitHub Secrets.
 
-The runner needs Bash, `curl`, Ruby with its standard-library YAML parser, and `jq`; GitHub-hosted Ubuntu and macOS runners include these tools.
+The runner needs Bash, `curl`, Mike Farah's `yq`, and `jq`.
 
 Set `smol-wf-version: latest` to install the latest stable smol-wf release. This resolves the version each time the action runs; use an explicit release tag when you want runs to stay on the same CLI version.
 
